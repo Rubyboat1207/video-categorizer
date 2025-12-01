@@ -176,18 +176,28 @@ class StatsDialog(QDialog):
                 colors.append("#888888")
             
             # Create Chart
-            fig = Figure(figsize=(5, 3), dpi=100)
+            fig = Figure(figsize=(5, 4), dpi=100) # Increased height
             ax = fig.add_subplot(111)
             
             if sizes:
-                ax.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%', startangle=90)
+                # Calculate percentages manually for legend
+                total = sum(sizes)
+                percent_labels = [f"{l} ({s/total*100:.1f}%)" for l, s in zip(labels, sizes)]
+
+                # No autopct to avoid collision inside the pie
+                wedges, texts = ax.pie(sizes, colors=colors, startangle=90)
+                
+                # Legend with percentages
+                ax.legend(wedges, percent_labels, title="Categories", loc="center left", bbox_to_anchor=(1, 0, 0.5, 1))
+                
                 ax.axis('equal') 
-                ax.set_title(f"Layer: {layer}")
+                ax.set_title(f"Layer: {layer}", pad=20)
+                fig.tight_layout()
             else:
                 ax.text(0.5, 0.5, f"No Data for Layer: {layer}", ha='center')
 
             canvas = FigureCanvas(fig)
-            canvas.setMinimumHeight(300)
+            canvas.setMinimumHeight(350)
             content_layout.addWidget(canvas)
             
             # Add Separator
@@ -219,6 +229,9 @@ class StatsDialog(QDialog):
             bars = ax.bar(labels, counts, color=colors)
             ax.set_ylabel('Count')
             ax.set_title('Bookmark Frequency')
+            # Rotate labels if needed
+            fig.autofmt_xdate(rotation=45)
+            fig.tight_layout()
         else:
             ax.text(0.5, 0.5, "No Bookmark Data", ha='center')
 
