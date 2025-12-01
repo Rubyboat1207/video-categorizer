@@ -2,21 +2,22 @@ import subprocess
 import shutil
 import os
 import tempfile
+from typing import Optional, List, Tuple
 
 class VideoExporter:
     @staticmethod
-    def get_ffmpeg_path(custom_path=None):
+    def get_ffmpeg_path(custom_path: Optional[str] = None) -> Optional[str]:
         if custom_path and os.path.exists(custom_path) and os.access(custom_path, os.X_OK):
             return custom_path
         return shutil.which('ffmpeg')
 
     @staticmethod
-    def ms_to_timestamp(ms):
+    def ms_to_timestamp(ms: int) -> str:
         seconds = ms / 1000.0
         return f"{seconds:.3f}"
 
     @staticmethod
-    def export_segment(ffmpeg_path, input_file, start_ms, end_ms, output_file):
+    def export_segment(ffmpeg_path: str, input_file: str, start_ms: int, end_ms: int, output_file: str) -> None:
         start = VideoExporter.ms_to_timestamp(start_ms)
         duration = VideoExporter.ms_to_timestamp(end_ms - start_ms)
         
@@ -37,7 +38,7 @@ class VideoExporter:
             raise Exception(f"FFmpeg error: {process.stderr.decode()}")
 
     @staticmethod
-    def export_merged_segments(ffmpeg_path, input_file, segments, output_file):
+    def export_merged_segments(ffmpeg_path: str, input_file: str, segments: List[Tuple[int, int]], output_file: str) -> None:
         # segments: list of (start_ms, end_ms)
         # Strategy: Create temp files for each clip, then concat.
         # Direct filter complex is cleaner but command length limits exist.

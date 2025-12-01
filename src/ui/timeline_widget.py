@@ -1,6 +1,8 @@
 from PyQt6.QtWidgets import QWidget, QMenu, QInputDialog, QMessageBox, QColorDialog, QScrollBar
-from PyQt6.QtCore import Qt, pyqtSignal, QRectF
-from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QPolygonF
+from PyQt6.QtCore import Qt, pyqtSignal, QRectF, QEvent
+from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QPolygonF, QResizeEvent, QWheelEvent, QMouseEvent, QContextMenuEvent
+from typing import Optional, List, Tuple, Dict, Any
+from src.models import Project, Section, Bookmark, Category
 
 class TimelineWidget(QWidget):
     positionChanged = pyqtSignal(int)  # Emits new position in ms when clicked
@@ -9,12 +11,12 @@ class TimelineWidget(QWidget):
     sectionDoubleClicked = pyqtSignal(object) # Emits the Section object
     exportSectionRequested = pyqtSignal(object) # Emits section to export
 
-    def __init__(self, project, duration=0):
+    def __init__(self, project: Project, duration: int = 0):
         super().__init__()
         self.project = project
         self.duration = duration  # Total duration in ms
         self.current_time = 0     # Current playback time in ms
-        self.current_scope = None # None = Root, or Section object
+        self.current_scope: Optional[Section] = None # None = Root, or Section object
         
         self.setMinimumHeight(100)
         self.setMouseTracking(True)
@@ -23,7 +25,7 @@ class TimelineWidget(QWidget):
         self.scroll_offset = 0 # ms offset from start
         self.vertical_scroll_offset = 0
         
-        self.dragging_bookmark = None
+        self.dragging_bookmark: Optional[Bookmark] = None
         self.dragging_playhead = False
         
         self.bm_area_height = 25
@@ -37,21 +39,21 @@ class TimelineWidget(QWidget):
         self.scrollbar.valueChanged.connect(self.on_scrollbar_change)
         
         # Edge dragging
-        self.drag_edge_section = None
-        self.drag_edge_type = None # 'start' or 'end'
-        self.hover_section = None
+        self.drag_edge_section: Optional[Section] = None
+        self.drag_edge_type: Optional[str] = None # 'start' or 'end'
+        self.hover_section: Optional[Section] = None
 
-    def resizeEvent(self, event):
+    def resizeEvent(self, event: QResizeEvent) -> None:
         self.scrollbar.setGeometry(0, self.height() - self.scrollbar_height, self.width(), self.scrollbar_height)
         self.update_scrollbar()
         super().resizeEvent(event)
 
-    def on_scrollbar_change(self, value):
+    def on_scrollbar_change(self, value: int) -> None:
         # Value is scroll_offset
         self.scroll_offset = value
         self.update()
 
-    def update_scrollbar(self):
+    def update_scrollbar(self) -> None:
         scope_start, scope_end = self.get_scope_bounds()
         total_scope_duration = max(1, scope_end - scope_start)
         visible_duration = total_scope_duration / self.zoom_level
@@ -61,7 +63,7 @@ class TimelineWidget(QWidget):
         self.scrollbar.setPageStep(int(visible_duration))
         self.scrollbar.setValue(int(self.scroll_offset))
 
-    def set_scope(self, scope):
+    def set_scope(self, scope: Optional[Section]) -> None:
         """Sets the current editing scope (Root project or Section)"""
         self.current_scope = scope
         self.zoom_level = 1.0 # Reset zoom on enter
@@ -71,35 +73,35 @@ class TimelineWidget(QWidget):
             self.scroll_offset = scope.start_time
         self.update()
 
-    def get_scope_bounds(self):
+    def get_scope_bounds(self) -> Tuple[int, int]:
         if self.current_scope is None:
             return 0, self.duration
         else:
             end = self.current_scope.end_time if self.current_scope.end_time else self.duration
             return self.current_scope.start_time, end
 
-    def get_visible_items(self):
+    def get_visible_items(self) -> Tuple[List[Section], List[Bookmark]]:
         if self.current_scope is None:
             return self.project.sections, self.project.bookmarks
         else:
             return self.current_scope.sub_sections, self.current_scope.bookmarks
 
-    def set_duration(self, duration):
+    def set_duration(self, duration: int) -> None:
         self.duration = duration
         self.update_scrollbar()
         self.update()
 
-    def set_position(self, position):
+    def set_position(self, position: int) -> None:
         self.current_time = position
         self.update()
 
-    def set_project(self, project):
+    def set_project(self, project: Project) -> None:
         self.project = project
         self.current_scope = None
         self.update_scrollbar()
         self.update()
 
-    def time_to_x(self, time_ms):
+    def time_to_x(self, time_ms: int) -> float:
         start, end = self.get_scope_bounds()
         total_scope_duration = max(1, end - start)
         
@@ -119,7 +121,7 @@ class TimelineWidget(QWidget):
         relative_time = time_ms - current_view_start
         return (relative_time / visible_duration) * self.width()
 
-    def x_to_time(self, x):
+    def x_to_time(self, x: float) -> float:
         start, end = self.get_scope_bounds()
         total_scope_duration = max(1, end - start)
         visible_duration = total_scope_duration / self.zoom_level
@@ -127,7 +129,7 @@ class TimelineWidget(QWidget):
         relative_time = (x / self.width()) * visible_duration
         return self.scroll_offset + relative_time
 
-    def get_layer_map(self):
+    def get_layer_map(self) -> Dict[str, int]:
         # Identify all unique layers from project categories
         # Note: We rely on categories present in the project definition, not just used ones
         # to ensure stable ordering if possible.
@@ -136,7 +138,7 @@ class TimelineWidget(QWidget):
             layers = ["Default"]
         return {name: i for i, name in enumerate(layers)}
 
-    def paintEvent(self, event):
+    def paintEvent(self, event: Any) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
@@ -265,7 +267,7 @@ class TimelineWidget(QWidget):
             painter.setPen(QPen(Qt.GlobalColor.white, 2))
             painter.drawLine(int(cursor_x), 0, int(cursor_x), height - self.scrollbar_height)
 
-    def wheelEvent(self, event):
+    def wheelEvent(self, event: QWheelEvent) -> None:
         if self.duration <= 0: return
         
         scope_start, scope_end = self.get_scope_bounds()
@@ -311,18 +313,18 @@ class TimelineWidget(QWidget):
             visible_duration = total_scope_duration / self.zoom_level
             scroll_amount = visible_duration * 0.1 
             if delta > 0:
-                self.scroll_offset -= scroll_amount
+                self.scroll_offset -= int(scroll_amount)
             else:
-                self.scroll_offset += scroll_amount
+                self.scroll_offset += int(scroll_amount)
             
             min_offset = scope_start
             max_offset = max(scope_start, scope_end - visible_duration)
-            self.scroll_offset = max(min_offset, min(self.scroll_offset, max_offset))
+            self.scroll_offset = int(max(min_offset, min(self.scroll_offset, max_offset)))
             self.update_scrollbar()
 
         self.update()
 
-    def mouseDoubleClickEvent(self, event):
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
             x = event.pos().x()
             y = event.pos().y()
@@ -355,7 +357,7 @@ class TimelineWidget(QWidget):
                 if target_section:
                     self.sectionDoubleClicked.emit(target_section)
 
-    def mousePressEvent(self, event):
+    def mousePressEvent(self, event: QMouseEvent) -> None:
         if self.duration <= 0: return
         
         sections, bookmarks = self.get_visible_items()
@@ -407,7 +409,7 @@ class TimelineWidget(QWidget):
                     new_pos = max(0, min(int(time_at_cursor), int(self.duration)))
                     self.positionChanged.emit(new_pos)
 
-    def mouseMoveEvent(self, event):
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
         x = event.pos().x()
         y = event.pos().y()
         time_at_cursor = self.x_to_time(x)
@@ -473,7 +475,7 @@ class TimelineWidget(QWidget):
             else:
                 self.setCursor(Qt.CursorShape.ArrowCursor)
 
-    def mouseReleaseEvent(self, event):
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         if self.dragging_bookmark:
             self.project.events.append(f"Moved Bookmark '{self.dragging_bookmark.category_name}'")
             self.dataChanged.emit()
@@ -488,7 +490,7 @@ class TimelineWidget(QWidget):
             self.drag_edge_type = None
             self.setCursor(Qt.CursorShape.ArrowCursor)
 
-    def contextMenuEvent(self, event):
+    def contextMenuEvent(self, event: QContextMenuEvent) -> None:
         if self.duration <= 0:
             return
 
@@ -582,18 +584,18 @@ class TimelineWidget(QWidget):
                 self.update()
                 self.dataChanged.emit()
 
-    def change_section_category(self, section, new_cat):
+    def change_section_category(self, section: Section, new_cat: str) -> None:
         section.category_name = new_cat
         self.project.events.append(f"Changed Section Category to {new_cat}")
         self.update()
         self.dataChanged.emit()
 
-    def show_properties(self, section):
+    def show_properties(self, section: Section) -> None:
         end = section.end_time if section.end_time else "Ongoing"
         msg = f"Category: {section.category_name}\nStart: {section.start_time}ms\nEnd: {end}"
         QMessageBox.information(self, "Section Properties", msg)
 
-    def edit_section_time(self, section):
+    def edit_section_time(self, section: Section) -> None:
         # Simplistic edit: change start time
         val, ok = QInputDialog.getInt(self, "Edit Start Time", "Start Time (ms):", section.start_time, 0, self.duration)
         if ok:

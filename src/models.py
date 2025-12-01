@@ -24,7 +24,7 @@ class Section:
     bookmarks: List[Bookmark] = field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, data):
+    def from_dict(cls, data: Dict) -> 'Section':
         # Handle simple fields
         sec = cls(
             category_name=data['category_name'],
@@ -48,11 +48,11 @@ class Project:
     events: List[str] = field(default_factory=list)
     keybinds: Dict[str, str] = field(default_factory=dict) # Key (e.g. "Ctrl+B") -> Category Name
 
-    def to_json(self):
+    def to_json(self) -> str:
         return json.dumps(asdict(self), indent=4)
 
     @classmethod
-    def from_json(cls, json_str):
+    def from_json(cls, json_str: str) -> 'Project':
         data = json.loads(json_str)
         project = cls(video_path=data.get('video_path', ""))
         
@@ -70,23 +70,23 @@ class Project:
             
         return project
 
-    def save(self, filepath):
+    def save(self, filepath: str) -> None:
         with open(filepath, 'w') as f:
             f.write(self.to_json())
 
     @classmethod
-    def load(cls, filepath):
+    def load(cls, filepath: str) -> 'Project':
         with open(filepath, 'r') as f:
             return cls.from_json(f.read())
 
-    def get_categories_by_type(self, type_name):
+    def get_categories_by_type(self, type_name: str) -> List[Category]:
         return [c for c in self.categories if c.type == type_name]
 
-    def add_category(self, name, type_name, color, layer="Default"):
+    def add_category(self, name: str, type_name: str, color: str, layer: str = "Default") -> None:
         if not any(c.name == name and c.type == type_name for c in self.categories):
             self.categories.append(Category(name, type_name, color, layer))
 
-    def remove_category(self, name, type_name):
+    def remove_category(self, name: str, type_name: str) -> None:
         self.categories = [c for c in self.categories if not (c.name == name and c.type == type_name)]
         # Also maybe clean up sections/bookmarks with this category? 
         # For now, let's keep them but they might be orphaned or we can handle it in UI.

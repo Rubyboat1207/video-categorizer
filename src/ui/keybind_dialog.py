@@ -1,15 +1,17 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem, 
-                             QPushButton, QComboBox, QLabel, QMessageBox, QHeaderView)
+                             QPushButton, QComboBox, QLabel, QMessageBox, QHeaderView, QWidget)
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QKeySequence
+from PyQt6.QtGui import QKeySequence, QKeyEvent
+from typing import Optional
+from src.models import Project
 
 class KeybindDialog(QDialog):
-    def __init__(self, project, parent=None):
+    def __init__(self, project: Project, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.setWindowTitle("Manage Keybinds")
         self.resize(500, 400)
         self.project = project
-        self.captured_key = None
+        self.captured_key: Optional[str] = None
         
         layout = QVBoxLayout(self)
         
@@ -48,7 +50,7 @@ class KeybindDialog(QDialog):
         # Note
         layout.addWidget(QLabel("Note: These keybinds create bookmarks at current time."))
 
-    def populate_table(self):
+    def populate_table(self) -> None:
         self.table.setRowCount(0)
         for key, cat in self.project.keybinds.items():
             row = self.table.rowCount()
@@ -56,16 +58,16 @@ class KeybindDialog(QDialog):
             self.table.setItem(row, 0, QTableWidgetItem(key))
             self.table.setItem(row, 1, QTableWidgetItem(cat))
 
-    def update_cat_combo(self):
+    def update_cat_combo(self) -> None:
         self.cat_combo.clear()
         for cat in self.project.get_categories_by_type('bookmark'):
             self.cat_combo.addItem(cat.name)
 
-    def capture_key(self):
+    def capture_key(self) -> None:
         self.key_btn.setText("Press any key...")
         self.grabKeyboard()
 
-    def keyPressEvent(self, event):
+    def keyPressEvent(self, event: QKeyEvent) -> None:
         if self.key_btn.isChecked():
             key = event.key()
             modifiers = event.modifiers()
@@ -91,7 +93,7 @@ class KeybindDialog(QDialog):
         else:
             super().keyPressEvent(event)
 
-    def add_keybind(self):
+    def add_keybind(self) -> None:
         if not self.captured_key:
             QMessageBox.warning(self, "Error", "Please press a key first.")
             return
@@ -106,7 +108,7 @@ class KeybindDialog(QDialog):
         self.captured_key = None
         self.key_btn.setText("Press Key...")
 
-    def remove_keybind(self):
+    def remove_keybind(self) -> None:
         row = self.table.currentRow()
         if row >= 0:
             key = self.table.item(row, 0).text()

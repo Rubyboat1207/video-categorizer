@@ -3,11 +3,13 @@ matplotlib.use('Qt5Agg') # compatible with Qt6 for embedding
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTabWidget, QWidget, QPushButton, QHBoxLayout, QFileDialog, QMessageBox, QComboBox, QLabel, QScrollArea
+from typing import List, Dict, Optional, Tuple, Any
+from src.models import Project, Section, Bookmark
 import collections
 import csv
 
 class StatsDialog(QDialog):
-    def __init__(self, project, total_duration, parent=None):
+    def __init__(self, project: Project, total_duration: int, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.setWindowTitle("Video Analysis Stats")
         self.resize(900, 700)
@@ -36,10 +38,10 @@ class StatsDialog(QDialog):
         layout.addLayout(btn_layout)
 
         # Map index to data: (sections, bookmarks, duration)
-        self.scope_data = {}
+        self.scope_data: Dict[int, Tuple[List[Section], List[Bookmark], int]] = {}
         self.populate_scopes()
 
-    def populate_scopes(self):
+    def populate_scopes(self) -> None:
         self.scope_combo.clear()
         self.scope_data = {}
         
@@ -50,7 +52,7 @@ class StatsDialog(QDialog):
         # Recursively add sections
         self.add_sections_recursive(self.project.sections, level=1)
         
-    def add_sections_recursive(self, sections, level):
+    def add_sections_recursive(self, sections: List[Section], level: int) -> None:
         for section in sections:
             indent = "  " * level
             name = f"{indent}Section: {section.category_name} ({section.start_time}-{section.end_time})"
@@ -64,17 +66,17 @@ class StatsDialog(QDialog):
             
             self.add_sections_recursive(section.sub_sections, level + 1)
 
-    def on_scope_changed(self, index):
+    def on_scope_changed(self, index: int) -> None:
         if index in self.scope_data:
             sections, bookmarks, duration = self.scope_data[index]
             self.update_charts(sections, bookmarks, duration)
 
-    def update_charts(self, sections, bookmarks, duration):
+    def update_charts(self, sections: List[Section], bookmarks: List[Bookmark], duration: int) -> None:
         self.tabs.clear()
         self.create_section_pie_chart(sections, duration)
         self.create_bookmark_bar_chart(bookmarks)
 
-    def export_csv(self):
+    def export_csv(self) -> None:
         path, _ = QFileDialog.getSaveFileName(self, "Export Stats", "", "CSV Files (*.csv)")
         if path:
             try:
@@ -107,7 +109,7 @@ class StatsDialog(QDialog):
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to export: {str(e)}")
 
-    def create_section_pie_chart(self, sections, duration_scope):
+    def create_section_pie_chart(self, sections: List[Section], duration_scope: int) -> None:
         # Container for multiple charts
         tab = QWidget()
         main_layout = QVBoxLayout(tab)
@@ -144,7 +146,7 @@ class StatsDialog(QDialog):
             layer_sections = sections_by_layer.get(layer, [])
             
             # Calculate durations for this layer
-            cat_durations = collections.defaultdict(int)
+            cat_durations: Dict[str, int] = collections.defaultdict(int)
             total_layer_duration = 0
             
             for section in layer_sections:
@@ -207,11 +209,11 @@ class StatsDialog(QDialog):
         main_layout.addWidget(scroll_area)
         self.tabs.addTab(tab, "Section Breakdown (Layers)")
 
-    def create_bookmark_bar_chart(self, bookmarks):
+    def create_bookmark_bar_chart(self, bookmarks: List[Bookmark]) -> None:
         tab = QWidget()
         layout = QVBoxLayout(tab)
 
-        cat_counts = collections.defaultdict(int)
+        cat_counts: Dict[str, int] = collections.defaultdict(int)
         for bm in bookmarks:
             cat_counts[bm.category_name] += 1
             

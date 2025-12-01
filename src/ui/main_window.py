@@ -9,7 +9,8 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QH
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6.QtMultimediaWidgets import QVideoWidget
 from PyQt6.QtCore import QUrl, Qt, QTimer, QSettings
-from PyQt6.QtGui import QAction, QIcon, QColor, QDragEnterEvent, QDropEvent, QKeySequence
+from PyQt6.QtGui import QAction, QIcon, QColor, QDragEnterEvent, QDropEvent, QKeySequence, QKeyEvent
+from typing import Optional, List, Dict, Any
 
 from src.models import Project, Section, Bookmark, Category
 from .timeline_widget import TimelineWidget
@@ -18,7 +19,7 @@ from .keybind_dialog import KeybindDialog
 from src.utils.exporter import VideoExporter
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Video Reviewer")
         self.resize(1200, 800)
@@ -26,7 +27,7 @@ class MainWindow(QMainWindow):
         # Apply Modern Dark Theme
         self.apply_stylesheet()
 
-        self.project = Project()
+        self.project: Project = Project()
         self.media_player = QMediaPlayer()
         self.audio_output = QAudioOutput()
         self.media_player.setAudioOutput(self.audio_output)
@@ -37,16 +38,16 @@ class MainWindow(QMainWindow):
         self.media_player.positionChanged.connect(self.position_changed)
         self.media_player.durationChanged.connect(self.duration_changed)
         
-        self.active_section = None # Currently recording section
-        self.current_scope = None # Current Section being edited (None for root)
+        self.active_section: Optional[Section] = None # Currently recording section
+        self.current_scope: Optional[Section] = None # Current Section being edited (None for root)
         
         self.settings = QSettings("VideoReviewer", "App")
-        self.recent_files = self.settings.value("recent_files", [], type=list)
-        self.ffmpeg_path = self.settings.value("ffmpeg_path", "")
-        self.current_project_path = None
+        self.recent_files: List[str] = self.settings.value("recent_files", [], type=list)
+        self.ffmpeg_path: str = self.settings.value("ffmpeg_path", "")
+        self.current_project_path: Optional[str] = None
         
-        self.undo_stack = []
-        self.redo_stack = []
+        self.undo_stack: List[str] = []
+        self.redo_stack: List[str] = []
 
         self.autosave_timer = QTimer()
         self.autosave_timer.timeout.connect(self.autosave)
@@ -55,11 +56,11 @@ class MainWindow(QMainWindow):
         self.init_ui()
         self.create_menu()
 
-    def apply_stylesheet(self):
+    def apply_stylesheet(self) -> None:
         # Stylesheet is applied in main.py globally
         pass
 
-    def init_ui(self):
+    def init_ui(self) -> None:
         self.setAcceptDrops(True)
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -206,7 +207,7 @@ class MainWindow(QMainWindow):
         # Set initial sizes
         splitter.setSizes([800, 300])
 
-    def create_menu(self):
+    def create_menu(self) -> None:
         menu_bar = self.menuBar()
         
         file_menu = menu_bar.addMenu("File")
@@ -252,14 +253,14 @@ class MainWindow(QMainWindow):
         redo_action.triggered.connect(self.redo)
         edit_menu.addAction(redo_action)
 
-    def save_state_for_undo(self):
+    def save_state_for_undo(self) -> None:
         if self.project:
             self.undo_stack.append(self.project.to_json())
             self.redo_stack.clear()
             if len(self.undo_stack) > 50:
                 self.undo_stack.pop(0)
 
-    def undo(self):
+    def undo(self) -> None:
         if not self.undo_stack:
             return
         self.redo_stack.append(self.project.to_json())
@@ -268,7 +269,7 @@ class MainWindow(QMainWindow):
         self.refresh_ui_after_state_change()
         self.update_log("Undid action")
 
-    def redo(self):
+    def redo(self) -> None:
         if not self.redo_stack:
             return
         self.undo_stack.append(self.project.to_json())
@@ -277,7 +278,7 @@ class MainWindow(QMainWindow):
         self.refresh_ui_after_state_change()
         self.update_log("Redid action")
 
-    def refresh_ui_after_state_change(self):
+    def refresh_ui_after_state_change(self) -> None:
         self.timeline.set_project(self.project)
         self.current_scope = None # Reset scope on undo/redo to avoid invalid pointers
         self.timeline.set_scope(None)
@@ -288,7 +289,7 @@ class MainWindow(QMainWindow):
             self.event_list.addItem(e)
         self.event_list.scrollToBottom()
 
-    def keyPressEvent(self, event):
+    def keyPressEvent(self, event: QKeyEvent) -> None:
         # Handle custom keybinds for bookmarks
         if not self.project: return
         
@@ -330,18 +331,18 @@ class MainWindow(QMainWindow):
         
         super().keyPressEvent(event)
 
-    def show_keybind_dialog(self):
+    def show_keybind_dialog(self) -> None:
         dlg = KeybindDialog(self.project, self)
         dlg.exec()
 
-    def update_recent_menu(self):
+    def update_recent_menu(self) -> None:
         self.recent_menu.clear()
         for path in self.recent_files:
             action = QAction(path, self)
             action.triggered.connect(lambda checked, p=path: self.load_project(p))
             self.recent_menu.addAction(action)
 
-    def add_recent_file(self, path):
+    def add_recent_file(self, path: str) -> None:
         if path in self.recent_files:
             self.recent_files.remove(path)
         self.recent_files.insert(0, path)
@@ -350,19 +351,19 @@ class MainWindow(QMainWindow):
         self.settings.setValue("recent_files", self.recent_files)
         self.update_recent_menu()
 
-    def toggle_autosave(self):
+    def toggle_autosave(self) -> None:
         if self.autosave_action.isChecked():
             self.autosave_timer.start(60000)
         else:
             self.autosave_timer.stop()
 
-    def dragEnterEvent(self, event: QDragEnterEvent):
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
         if event.mimeData().hasUrls():
             event.accept()
         else:
             event.ignore()
 
-    def dropEvent(self, event: QDropEvent):
+    def dropEvent(self, event: QDropEvent) -> None:
         files = [u.toLocalFile() for u in event.mimeData().urls()]
         if files:
             video_path = files[0]
@@ -383,7 +384,7 @@ class MainWindow(QMainWindow):
                     self.play_video()
                     self.update_log(f"Started new project with {os.path.basename(video_path)}")
 
-    def autosave(self):
+    def autosave(self) -> None:
         if self.current_project_path:
             try:
                 self.project.save(self.current_project_path)
@@ -391,10 +392,10 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 print(f"Autosave failed: {e}")
 
-    def on_timeline_data_changed(self):
+    def on_timeline_data_changed(self) -> None:
         self.update_log("Timeline data modified")
 
-    def show_section_category_menu(self, btn):
+    def show_section_category_menu(self, btn: QPushButton) -> None:
         menu = QMenu(self)
         edit_action = menu.addAction("Edit Category")
         export_action = menu.addAction("Export Merged Video")
@@ -405,7 +406,7 @@ class MainWindow(QMainWindow):
         elif action == export_action:
             self.export_merged_video()
 
-    def show_ffmpeg_settings(self):
+    def show_ffmpeg_settings(self) -> None:
         current = self.ffmpeg_path or VideoExporter.get_ffmpeg_path() or ""
         path, ok = QInputDialog.getText(self, "FFmpeg Settings", "Path to FFmpeg executable:", text=current)
         if ok:
@@ -415,7 +416,7 @@ class MainWindow(QMainWindow):
             self.ffmpeg_path = path
             self.settings.setValue("ffmpeg_path", path)
 
-    def get_ffmpeg_or_warn(self):
+    def get_ffmpeg_or_warn(self) -> Optional[str]:
         path = VideoExporter.get_ffmpeg_path(self.ffmpeg_path)
         if not path:
             QMessageBox.warning(self, "FFmpeg Not Found", 
@@ -423,7 +424,7 @@ class MainWindow(QMainWindow):
             return None
         return path
 
-    def export_single_segment(self, section):
+    def export_single_segment(self, section: Section) -> None:
         ffmpeg_path = self.get_ffmpeg_or_warn()
         if not ffmpeg_path: return
         
@@ -445,7 +446,7 @@ class MainWindow(QMainWindow):
                 QApplication.restoreOverrideCursor()
                 QMessageBox.critical(self, "Error", str(e))
 
-    def export_merged_video(self):
+    def export_merged_video(self) -> None:
         cat_name = self.sec_combo.currentText()
         if not cat_name: return
         
@@ -458,9 +459,9 @@ class MainWindow(QMainWindow):
 
         # Collect segments for this category (recursive?)
         # Let's search all sections in project (global export) matching this category
-        segments = []
+        segments: List[Any] = []
         
-        def collect_recursive(section_list):
+        def collect_recursive(section_list: List[Section]) -> None:
             for s in section_list:
                 if s.category_name == cat_name:
                     end = s.end_time if s.end_time else self.media_player.duration()
@@ -488,7 +489,7 @@ class MainWindow(QMainWindow):
                 QApplication.restoreOverrideCursor()
                 QMessageBox.critical(self, "Error", str(e))
 
-    def edit_category(self, cat_type):
+    def edit_category(self, cat_type: str) -> None:
         self.save_state_for_undo()
         combo = self.sec_combo if cat_type == 'section' else self.bk_combo
         current_name = combo.currentText()
@@ -551,55 +552,7 @@ class MainWindow(QMainWindow):
                 self.refresh_combos()
                 self.timeline.update()
 
-    def jump_prev_section(self):
-        combo = self.sec_combo if cat_type == 'section' else self.bk_combo
-        current_name = combo.currentText()
-        if not current_name:
-            return
-            
-        cat = next((c for c in self.project.categories if c.name == current_name and c.type == cat_type), None)
-        if not cat:
-            return
-
-        menu = QMenu(self)
-        rename_action = menu.addAction("Rename")
-        color_action = menu.addAction("Change Color")
-        delete_action = menu.addAction("Delete")
-        
-        action = menu.exec(combo.mapToGlobal(combo.rect().bottomLeft()))
-        
-        if action == rename_action:
-            new_name, ok = QInputDialog.getText(self, "Rename Category", "Name:", text=current_name)
-            if ok and new_name:
-                # Update category
-                cat.name = new_name
-                # Update references
-                if cat_type == 'section':
-                    for s in self.project.sections:
-                        if s.category_name == current_name: s.category_name = new_name
-                else:
-                    for b in self.project.bookmarks:
-                        if b.category_name == current_name: b.category_name = new_name
-                self.refresh_combos()
-                combo.setCurrentText(new_name)
-                self.timeline.update()
-                
-        elif action == color_action:
-            color = QColorDialog.getColor(QColor(cat.color))
-            if color.isValid():
-                cat.color = color.name()
-                self.timeline.update()
-                
-        elif action == delete_action:
-            reply = QMessageBox.question(self, "Delete Category", 
-                                         "Delete this category? Associated sections/bookmarks will remain but may lose color.",
-                                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-            if reply == QMessageBox.StandardButton.Yes:
-                self.project.categories.remove(cat)
-                self.refresh_combos()
-                self.timeline.update()
-
-    def jump_prev_section(self):
+    def jump_prev_section(self) -> None:
         current = self.media_player.position()
         target = 0
         
@@ -617,7 +570,7 @@ class MainWindow(QMainWindow):
                 
         self.media_player.setPosition(target)
 
-    def jump_next_section(self):
+    def jump_next_section(self) -> None:
         current = self.media_player.position()
         duration = self.media_player.duration()
         target = duration
@@ -635,7 +588,7 @@ class MainWindow(QMainWindow):
                 
         self.media_player.setPosition(target)
 
-    def open_video(self):
+    def open_video(self) -> None:
         # Prompt to save current project if needed (or just save if autosave is on? Better to ask)
         if self.project.sections or self.project.bookmarks:
             reply = QMessageBox.question(self, "Save Project?", 
@@ -660,7 +613,7 @@ class MainWindow(QMainWindow):
             self.play_video()
             self.update_log(f"Started new project with {os.path.basename(file_path)}")
 
-    def play_video(self):
+    def play_video(self) -> None:
         if self.media_player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
             self.media_player.pause()
             self.play_btn.setText("Play")
@@ -668,19 +621,19 @@ class MainWindow(QMainWindow):
             self.media_player.play()
             self.play_btn.setText("Pause")
 
-    def prev_frame(self):
+    def prev_frame(self) -> None:
         self.media_player.pause()
         self.play_btn.setText("Play")
         current = self.media_player.position()
         self.media_player.setPosition(max(0, current - 33)) # Approx 1 frame at 30fps
 
-    def next_frame(self):
+    def next_frame(self) -> None:
         self.media_player.pause()
         self.play_btn.setText("Play")
         current = self.media_player.position()
         self.media_player.setPosition(current + 33) # Approx 1 frame at 30fps
 
-    def change_speed(self, text):
+    def change_speed(self, text: str) -> None:
         try:
             speed_str = text.lower().replace('x', '')
             speed = float(speed_str)
@@ -689,7 +642,7 @@ class MainWindow(QMainWindow):
         except ValueError:
             pass # Invalid input, ignore
 
-    def position_changed(self, position):
+    def position_changed(self, position: int) -> None:
         self.timeline.set_position(position)
         self.update_time_label(position)
         
@@ -699,17 +652,17 @@ class MainWindow(QMainWindow):
             # For now, timeline just shows static sections
             pass
 
-    def duration_changed(self, duration):
+    def duration_changed(self, duration: int) -> None:
         self.timeline.set_duration(duration)
         self.update_time_label(self.media_player.position())
 
-    def update_time_label(self, position):
+    def update_time_label(self, position: int) -> None:
         duration = self.media_player.duration()
         pos_str = self.format_time(position)
         dur_str = self.format_time(duration)
         self.time_label.setText(f"{pos_str} / {dur_str}")
 
-    def format_time(self, ms):
+    def format_time(self, ms: int) -> str:
         seconds = (ms // 1000) % 60
         minutes = (ms // 60000) % 60
         hours = (ms // 3600000)
@@ -717,10 +670,10 @@ class MainWindow(QMainWindow):
             return f"{hours:02}:{minutes:02}:{seconds:02}"
         return f"{minutes:02}:{seconds:02}"
 
-    def seek_video(self, position):
+    def seek_video(self, position: int) -> None:
         self.media_player.setPosition(position)
 
-    def add_category_dialog(self):
+    def add_category_dialog(self) -> None:
         name, ok = QInputDialog.getText(self, "New Category", "Category Name:")
         if ok and name:
             type_name, ok_type = QInputDialog.getItem(self, "Category Type", "Type:", ["section", "bookmark"], 0, False)
@@ -741,7 +694,7 @@ class MainWindow(QMainWindow):
                     self.refresh_combos()
                     self.timeline.update()
 
-    def refresh_combos(self):
+    def refresh_combos(self) -> None:
         self.sec_combo.clear()
         self.bk_combo.clear()
         
@@ -753,15 +706,18 @@ class MainWindow(QMainWindow):
         for c in bks:
             self.bk_combo.addItem(c.name)
 
-    def enter_section_scope(self, section):
+    def enter_section_scope(self, section: Section) -> None:
         self.current_scope = section
         self.timeline.set_scope(section)
         self.back_scope_btn.setEnabled(True)
+
+        
+
         # Zoom video player logic could be added here to loop only this section, 
         # but for now let's just focus the timeline.
         self.setWindowTitle(f"Video Reviewer - {section.category_name} (Sub-Section Mode)")
 
-    def exit_scope(self):
+    def exit_scope(self) -> None:
         # TODO: Handle multi-level nesting (stack) if needed. 
         # Currently just 1 level deep is implemented for simplicity, but model supports infinite.
         # To support infinite, we'd need a parent reference or traverse from root.
@@ -772,7 +728,7 @@ class MainWindow(QMainWindow):
         self.back_scope_btn.setEnabled(False)
         self.setWindowTitle("Video Reviewer")
 
-    def toggle_section(self):
+    def toggle_section(self) -> None:
         if self.active_section:
             self.save_state_for_undo()
             # Stop section
@@ -802,7 +758,7 @@ class MainWindow(QMainWindow):
             self.start_sec_btn.setText("Stop Section")
             self.update_log(f"Started Section: {cat_name}")
 
-    def add_bookmark(self):
+    def add_bookmark(self) -> None:
         cat_name = self.bk_combo.currentText()
         if not cat_name:
             return
@@ -838,12 +794,12 @@ class MainWindow(QMainWindow):
         self.timeline.update()
         self.update_log(f"Added Bookmark: {cat_name}")
 
-    def update_log(self, message):
+    def update_log(self, message: str) -> None:
         self.event_list.addItem(message)
         self.event_list.scrollToBottom()
         self.project.events.append(message)
 
-    def show_stats(self):
+    def show_stats(self) -> None:
         if not self.project.sections and not self.project.bookmarks:
             QMessageBox.information(self, "Info", "No data to analyze yet.")
             return
@@ -851,7 +807,7 @@ class MainWindow(QMainWindow):
         dlg = StatsDialog(self.project, self.media_player.duration(), self)
         dlg.exec()
 
-    def save_project(self):
+    def save_project(self) -> None:
         if self.current_project_path:
             path = self.current_project_path
         else:
@@ -863,12 +819,12 @@ class MainWindow(QMainWindow):
             self.add_recent_file(path)
             self.update_log("Project saved.")
 
-    def load_project_dialog(self):
+    def load_project_dialog(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Load Project", "", "JSON Files (*.json)")
         if path:
             self.load_project(path)
 
-    def load_project(self, path):
+    def load_project(self, path: str) -> None:
         if not os.path.exists(path):
             QMessageBox.warning(self, "Error", "File does not exist.")
             return
