@@ -15,6 +15,7 @@ from src.models import Project, Section, Bookmark, Category
 from .timeline_widget import TimelineWidget
 from .stats_dialog import StatsDialog
 from .keybind_dialog import KeybindDialog
+from src.utils.exporter import VideoExporter
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -41,6 +42,7 @@ class MainWindow(QMainWindow):
         
         self.settings = QSettings("VideoReviewer", "App")
         self.recent_files = self.settings.value("recent_files", [], type=list)
+        self.ffmpeg_path = self.settings.value("ffmpeg_path", "")
         self.current_project_path = None
         
         self.undo_stack = []
@@ -125,6 +127,7 @@ class MainWindow(QMainWindow):
         self.timeline.dataChanged.connect(self.on_timeline_data_changed)
         self.timeline.aboutToModify.connect(self.save_state_for_undo)
         self.timeline.sectionDoubleClicked.connect(self.enter_section_scope)
+        self.timeline.exportSectionRequested.connect(self.export_single_segment)
         left_layout.addWidget(self.timeline, stretch=1)
 
         splitter.addWidget(left_widget)
@@ -158,7 +161,7 @@ class MainWindow(QMainWindow):
         
         edit_sec_btn = QPushButton("Edit")
         edit_sec_btn.setMaximumWidth(50)
-        edit_sec_btn.clicked.connect(lambda: self.edit_category("section"))
+        edit_sec_btn.clicked.connect(lambda: self.show_section_category_menu(edit_sec_btn))
         hbox_sec_edit.addWidget(edit_sec_btn)
         
         sec_layout.addLayout(hbox_sec_edit)
@@ -233,6 +236,10 @@ class MainWindow(QMainWindow):
         keybind_action = QAction("Manage Keybinds", self)
         keybind_action.triggered.connect(self.show_keybind_dialog)
         options_menu.addAction(keybind_action)
+
+        ffmpeg_action = QAction("FFmpeg Settings", self)
+        ffmpeg_action.triggered.connect(self.show_ffmpeg_settings)
+        options_menu.addAction(ffmpeg_action)
         
         edit_menu = menu_bar.addMenu("Edit")
         undo_action = QAction("Undo", self)
@@ -386,6 +393,100 @@ class MainWindow(QMainWindow):
 
     def on_timeline_data_changed(self):
         self.update_log("Timeline data modified")
+
+    def show_section_category_menu(self, btn):
+        menu = QMenu(self)
+        edit_action = menu.addAction("Edit Category")
+        export_action = menu.addAction("Export Merged Video")
+        
+        action = menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
+        if action == edit_action:
+            self.edit_category("section")
+        elif action == export_action:
+            self.export_merged_video()
+
+    def show_ffmpeg_settings(self):
+        current = self.ffmpeg_path or VideoExporter.get_ffmpeg_path() or ""
+        path, ok = QInputDialog.getText(self, "FFmpeg Settings", "Path to FFmpeg executable:", text=current)
+        if ok:
+            if path and not os.path.exists(path):
+                QMessageBox.warning(self, "Error", "File not found.")
+                return
+            self.ffmpeg_path = path
+            self.settings.setValue("ffmpeg_path", path)
+
+    def get_ffmpeg_or_warn(self):
+        path = VideoExporter.get_ffmpeg_path(self.ffmpeg_path)
+        if not path:
+            QMessageBox.warning(self, "FFmpeg Not Found", 
+                                "FFmpeg is required for exporting. Please install it or set the path in Options -> FFmpeg Settings.")
+            return None
+        return path
+
+    def export_single_segment(self, section):
+        ffmpeg_path = self.get_ffmpeg_or_warn()
+        if not ffmpeg_path: return
+        
+        if not self.project.video_path or not os.path.exists(self.project.video_path):
+            QMessageBox.warning(self, "Error", "Original video file not found.")
+            return
+
+        out_path, _ = QFileDialog.getSaveFileName(self, "Export Segment", 
+                                                  f"{section.category_name}.mp4", "MP4 Files (*.mp4)")
+        if out_path:
+            end = section.end_time if section.end_time else self.media_player.duration()
+            try:
+                # Todo: Show progress? For now just wait cursor.
+                QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+                VideoExporter.export_segment(ffmpeg_path, self.project.video_path, section.start_time, end, out_path)
+                QApplication.restoreOverrideCursor()
+                QMessageBox.information(self, "Success", "Export complete.")
+            except Exception as e:
+                QApplication.restoreOverrideCursor()
+                QMessageBox.critical(self, "Error", str(e))
+
+    def export_merged_video(self):
+        cat_name = self.sec_combo.currentText()
+        if not cat_name: return
+        
+        ffmpeg_path = self.get_ffmpeg_or_warn()
+        if not ffmpeg_path: return
+
+        if not self.project.video_path or not os.path.exists(self.project.video_path):
+            QMessageBox.warning(self, "Error", "Original video file not found.")
+            return
+
+        # Collect segments for this category (recursive?)
+        # Let's search all sections in project (global export) matching this category
+        segments = []
+        
+        def collect_recursive(section_list):
+            for s in section_list:
+                if s.category_name == cat_name:
+                    end = s.end_time if s.end_time else self.media_player.duration()
+                    segments.append((s.start_time, end))
+                collect_recursive(s.sub_sections)
+        
+        collect_recursive(self.project.sections)
+        
+        if not segments:
+            QMessageBox.information(self, "Info", "No segments found for this category.")
+            return
+            
+        # Sort segments by start time
+        segments.sort(key=lambda x: x[0])
+        
+        out_path, _ = QFileDialog.getSaveFileName(self, "Export Merged Video", 
+                                                  f"{cat_name}_merged.mp4", "MP4 Files (*.mp4)")
+        if out_path:
+            try:
+                QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+                VideoExporter.export_merged_segments(ffmpeg_path, self.project.video_path, segments, out_path)
+                QApplication.restoreOverrideCursor()
+                QMessageBox.information(self, "Success", "Export complete.")
+            except Exception as e:
+                QApplication.restoreOverrideCursor()
+                QMessageBox.critical(self, "Error", str(e))
 
     def edit_category(self, cat_type):
         self.save_state_for_undo()

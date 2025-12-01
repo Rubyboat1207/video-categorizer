@@ -7,6 +7,7 @@ class TimelineWidget(QWidget):
     dataChanged = pyqtSignal() # Emits when data modified via context menu
     aboutToModify = pyqtSignal() # Emits BEFORE data modification
     sectionDoubleClicked = pyqtSignal(object) # Emits the Section object
+    exportSectionRequested = pyqtSignal(object) # Emits section to export
 
     def __init__(self, project, duration=0):
         super().__init__()
@@ -561,16 +562,20 @@ class TimelineWidget(QWidget):
                 act.triggered.connect(lambda ch, s=target_section, c=cat.name: self.change_section_category(s, c))
             
             menu.addSeparator()
+            export_action = menu.addAction("Export Video Segment")
+            menu.addSeparator()
             delete_action = menu.addAction("Delete Section")
             
             action = menu.exec(event.globalPos())
             
-            if action and action != props_action: self.aboutToModify.emit()
+            if action and action != props_action and action != export_action: self.aboutToModify.emit()
 
             if action == props_action:
                 self.show_properties(target_section)
             elif action == edit_action:
                 self.edit_section_time(target_section)
+            elif action == export_action:
+                self.exportSectionRequested.emit(target_section)
             elif action == delete_action:
                 sections.remove(target_section)
                 self.project.events.append(f"Deleted Section: {target_section.category_name}")
