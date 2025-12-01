@@ -21,6 +21,9 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Video Reviewer")
         self.resize(1200, 800)
+        
+        # Apply Modern Dark Theme
+        self.apply_stylesheet()
 
         self.project = Project()
         self.media_player = QMediaPlayer()
@@ -49,6 +52,112 @@ class MainWindow(QMainWindow):
 
         self.init_ui()
         self.create_menu()
+
+    def apply_stylesheet(self):
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #1E1E1E;
+            }
+            QWidget {
+                color: #CCCCCC;
+                font-family: 'Segoe UI', Arial, sans-serif;
+                font-size: 14px;
+            }
+            QPushButton {
+                background-color: #0E639C;
+                color: white;
+                border: none;
+                padding: 5px 10px;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #1177BB;
+            }
+            QPushButton:pressed {
+                background-color: #094771;
+            }
+            QPushButton:disabled {
+                background-color: #333333;
+                color: #888888;
+            }
+            QLineEdit, QComboBox, QListWidget, QScrollArea {
+                background-color: #3C3C3C;
+                border: 1px solid #3E3E42;
+                border-radius: 4px;
+                padding: 4px;
+                color: #CCCCCC;
+            }
+            QComboBox::drop-down {
+                border: none;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #252526;
+                selection-background-color: #094771;
+            }
+            QGroupBox {
+                border: 1px solid #3E3E42;
+                border-radius: 4px;
+                margin-top: 20px;
+                font-weight: bold;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                padding: 0 5px;
+            }
+            QSplitter::handle {
+                background-color: #333333;
+            }
+            QMenuBar {
+                background-color: #333333;
+                color: #CCCCCC;
+            }
+            QMenuBar::item:selected {
+                background-color: #505050;
+            }
+            QMenu {
+                background-color: #252526;
+                border: 1px solid #3E3E42;
+            }
+            QMenu::item:selected {
+                background-color: #094771;
+            }
+            QScrollBar:vertical {
+                border: none;
+                background: #1E1E1E;
+                width: 14px;
+                margin: 0px;
+            }
+            QScrollBar::handle:vertical {
+                background: #424242;
+                min-height: 20px;
+                border-radius: 7px;
+                margin: 2px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #686868;
+            }
+            QScrollBar:horizontal {
+                border: none;
+                background: #1E1E1E;
+                height: 14px;
+                margin: 0px;
+            }
+            QScrollBar::handle:horizontal {
+                background: #424242;
+                min-width: 20px;
+                border-radius: 7px;
+                margin: 2px;
+            }
+            QScrollBar::handle:horizontal:hover {
+                background: #686868;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+                border: none;
+                background: none;
+            }
+        """)
 
     def init_ui(self):
         self.setAcceptDrops(True)

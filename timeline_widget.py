@@ -200,7 +200,9 @@ class TimelineWidget(QWidget):
             h = self.current_row_height - 4
 
             # Main Section Rect
-            painter.fillRect(int(start_x), int(y), int(rect_width), int(h), color)
+            painter.setBrush(QBrush(color))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawRoundedRect(int(start_x), int(y), int(rect_width), int(h), 4, 4)
             
             # Sub-sections (Bottom Half)
             if hasattr(section, 'sub_sections') and section.sub_sections:
@@ -222,7 +224,8 @@ class TimelineWidget(QWidget):
                     ex = self.time_to_x(s_end)
                     sw = max(1, ex - sx)
                     
-                    painter.fillRect(int(sx), int(sub_y), int(sw), int(sub_h), sub_color)
+                    painter.setBrush(QBrush(sub_color))
+                    painter.drawRoundedRect(int(sx), int(sub_y), int(sw), int(sub_h), 2, 2)
 
         painter.restore()
 
