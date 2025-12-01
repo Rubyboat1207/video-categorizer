@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QWidget, QMenu, QInputDialog, QMessageBox, QColorDialog
+from PyQt6.QtWidgets import QWidget, QMenu, QInputDialog, QMessageBox, QColorDialog, QScrollBar
 from PyQt6.QtCore import Qt, pyqtSignal, QRectF
 from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QPolygonF
 
@@ -15,20 +15,50 @@ class TimelineWidget(QWidget):
         self.current_time = 0     # Current playback time in ms
         self.current_scope = None # None = Root, or Section object
         
-        self.setMinimumHeight(100) # Increased for bookmark area
+        self.setMinimumHeight(100)
         self.setMouseTracking(True)
         
         self.zoom_level = 1.0
         self.scroll_offset = 0 # ms offset from start
+        self.vertical_scroll_offset = 0
         
         self.dragging_bookmark = None
+        self.dragging_playhead = False
+        
         self.bm_area_height = 25
-        self.row_height = 30
+        self.min_row_height = 50
+        self.current_row_height = 50
+        self.scrollbar_height = 15
+        
+        # Horizontal Scrollbar (Time)
+        self.scrollbar = QScrollBar(Qt.Orientation.Horizontal, self)
+        self.scrollbar.setFixedHeight(self.scrollbar_height)
+        self.scrollbar.valueChanged.connect(self.on_scrollbar_change)
         
         # Edge dragging
         self.drag_edge_section = None
         self.drag_edge_type = None # 'start' or 'end'
         self.hover_section = None
+
+    def resizeEvent(self, event):
+        self.scrollbar.setGeometry(0, self.height() - self.scrollbar_height, self.width(), self.scrollbar_height)
+        self.update_scrollbar()
+        super().resizeEvent(event)
+
+    def on_scrollbar_change(self, value):
+        # Value is scroll_offset
+        self.scroll_offset = value
+        self.update()
+
+    def update_scrollbar(self):
+        scope_start, scope_end = self.get_scope_bounds()
+        total_scope_duration = max(1, scope_end - scope_start)
+        visible_duration = total_scope_duration / self.zoom_level
+        
+        self.scrollbar.setMinimum(scope_start)
+        self.scrollbar.setMaximum(max(scope_start, int(scope_end - visible_duration)))
+        self.scrollbar.setPageStep(int(visible_duration))
+        self.scrollbar.setValue(int(self.scroll_offset))
 
     def set_scope(self, scope):
         """Sets the current editing scope (Root project or Section)"""
@@ -55,6 +85,7 @@ class TimelineWidget(QWidget):
 
     def set_duration(self, duration):
         self.duration = duration
+        self.update_scrollbar()
         self.update()
 
     def set_position(self, position):
@@ -64,6 +95,7 @@ class TimelineWidget(QWidget):
     def set_project(self, project):
         self.project = project
         self.current_scope = None
+        self.update_scrollbar()
         self.update()
 
     def time_to_x(self, time_ms):
@@ -121,27 +153,28 @@ class TimelineWidget(QWidget):
         layer_map = self.get_layer_map()
         num_layers = len(layer_map)
         
-        # Ensure widget is tall enough
-        required_height = self.bm_area_height + num_layers * self.row_height
-        if self.minimumHeight() != required_height:
-            self.setMinimumHeight(required_height)
+        # Calculate Row Height dynamically
+        available_height = height - self.bm_area_height - self.scrollbar_height
+        if num_layers > 0:
+            self.current_row_height = max(self.min_row_height, available_height / num_layers)
+        else:
+            self.current_row_height = self.min_row_height
 
-        # Draw Layer Backgrounds (Alternating?)
+        # Apply Vertical Scroll Transform
+        painter.save()
+        # Clip to layer area
+        painter.setClipRect(0, self.bm_area_height, width, available_height)
+        painter.translate(0, -self.vertical_scroll_offset)
+
+        # Draw Layer Backgrounds
         for i in range(num_layers):
-            y = self.bm_area_height + i * self.row_height
+            y = self.bm_area_height + i * self.current_row_height
             if i % 2 == 1:
-                painter.fillRect(0, y, width, self.row_height, QColor(255, 255, 255, 10))
+                painter.fillRect(0, int(y), width, int(self.current_row_height), QColor(255, 255, 255, 10))
             # Separator
             painter.setPen(QPen(QColor("#444444"), 1))
-            painter.drawLine(0, y, width, y)
+            painter.drawLine(0, int(y), width, int(y))
 
-        # Separator for bookmark area
-        painter.setPen(QPen(QColor("#555555"), 1))
-        painter.drawLine(0, self.bm_area_height, width, self.bm_area_height)
-
-        if self.duration <= 0:
-            return
-            
         scope_start, scope_end = self.get_scope_bounds()
         sections, bookmarks = self.get_visible_items()
 
@@ -163,12 +196,41 @@ class TimelineWidget(QWidget):
                 continue
                 
             rect_width = max(1, end_x - start_x) 
-            y = self.bm_area_height + layer_idx * self.row_height + 2 # +2 padding
-            h = self.row_height - 4
+            y = self.bm_area_height + layer_idx * self.current_row_height + 2
+            h = self.current_row_height - 4
 
-            painter.fillRect(int(start_x), y, int(rect_width), h, color)
+            # Main Section Rect
+            painter.fillRect(int(start_x), int(y), int(rect_width), int(h), color)
+            
+            # Sub-sections (Bottom Half)
+            if hasattr(section, 'sub_sections') and section.sub_sections:
+                sub_y = y + h / 2
+                sub_h = h / 2
+                for sub in section.sub_sections:
+                    sub_cat = next((c for c in self.project.categories if c.name == sub.category_name and c.type == 'section'), None)
+                    if not sub_cat: continue
+                    
+                    sub_color = QColor(sub_cat.color)
+                    
+                    # Sub-section times are absolute? If they are relative to section, we adjust.
+                    # Assuming absolute for now based on previous implementation.
+                    s_start = max(section.start_time, sub.start_time)
+                    s_end = sub.end_time if sub.end_time else end_time
+                    s_end = min(end_time, s_end)
+                    
+                    sx = self.time_to_x(s_start)
+                    ex = self.time_to_x(s_end)
+                    sw = max(1, ex - sx)
+                    
+                    painter.fillRect(int(sx), int(sub_y), int(sw), int(sub_h), sub_color)
 
-        # Draw Bookmarks
+        painter.restore()
+
+        # Draw Bookmarks (Fixed Top Area)
+        # Separator for bookmark area
+        painter.setPen(QPen(QColor("#555555"), 1))
+        painter.drawLine(0, self.bm_area_height, width, self.bm_area_height)
+
         for bookmark in bookmarks:
             cat = next((c for c in self.project.categories if c.name == bookmark.category_name and c.type == 'bookmark'), None)
             if not cat:
@@ -180,9 +242,13 @@ class TimelineWidget(QWidget):
             if x < -10 or x > width + 10:
                 continue
             
-            # Draw line in main area (through all layers)
+            # Draw line in main area (through all layers) - Need to respect scroll?
+            # Actually, line should go full height, but clipped by scroll area?
+            # Let's draw line from top to bottom, but visually it might look weird if scrolling.
+            # User focus is playhead.
+            
             painter.setPen(QPen(color, 2))
-            painter.drawLine(int(x), self.bm_area_height, int(x), height)
+            painter.drawLine(int(x), self.bm_area_height, int(x), height - self.scrollbar_height)
             
             # Draw Handle in mini timeline
             painter.setBrush(QBrush(color))
@@ -193,47 +259,63 @@ class TimelineWidget(QWidget):
         cursor_x = self.time_to_x(self.current_time)
         if 0 <= cursor_x <= width:
             painter.setPen(QPen(Qt.GlobalColor.white, 2))
-            painter.drawLine(int(cursor_x), 0, int(cursor_x), height)
+            painter.drawLine(int(cursor_x), 0, int(cursor_x), height - self.scrollbar_height)
 
     def wheelEvent(self, event):
         if self.duration <= 0: return
         
         scope_start, scope_end = self.get_scope_bounds()
         total_scope_duration = max(1, scope_end - scope_start)
+        
+        modifiers = event.modifiers()
+        delta = event.angleDelta().y()
 
-        # Zoom
-        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-            delta = event.angleDelta().y()
+        if modifiers & Qt.KeyboardModifier.ControlModifier:
+            # Zoom (Ctrl + Wheel)
             zoom_factor = 1.1 if delta > 0 else 0.9
-            
-            # Zoom centered on mouse
             mouse_time = self.x_to_time(event.position().x())
-            
             self.zoom_level *= zoom_factor
             self.zoom_level = max(1.0, min(self.zoom_level, 50.0))
             
             visible_duration = total_scope_duration / self.zoom_level
             new_offset = mouse_time - (event.position().x() / self.width()) * visible_duration
             
-            # Clamp offset to scope bounds
             min_offset = scope_start
-            max_offset = scope_end - visible_duration
+            max_offset = max(scope_start, scope_end - visible_duration)
             self.scroll_offset = max(min_offset, min(new_offset, max_offset))
+            self.update_scrollbar()
+
+        elif modifiers & Qt.KeyboardModifier.ShiftModifier:
+            # Vertical Scroll (Layers) (Shift + Wheel)
+            scroll_speed = 30
+            if delta > 0:
+                self.vertical_scroll_offset -= scroll_speed
+            else:
+                self.vertical_scroll_offset += scroll_speed
             
-        else: # Scroll
-            delta = event.angleDelta().y()
+            # Clamp vertical scroll
+            # Calculate total content height
+            num_layers = len(self.get_layer_map())
+            content_height = num_layers * self.current_row_height
+            visible_height = self.height() - self.bm_area_height - self.scrollbar_height
+            
+            max_scroll = max(0, content_height - visible_height)
+            self.vertical_scroll_offset = max(0, min(self.vertical_scroll_offset, max_scroll))
+
+        else:
+            # Horizontal Scroll (Time) (Normal Wheel)
             visible_duration = total_scope_duration / self.zoom_level
-            scroll_amount = visible_duration * 0.1 # Scroll 10% of visible
-            
+            scroll_amount = visible_duration * 0.1 
             if delta > 0:
                 self.scroll_offset -= scroll_amount
             else:
                 self.scroll_offset += scroll_amount
             
             min_offset = scope_start
-            max_offset = scope_end - visible_duration
+            max_offset = max(scope_start, scope_end - visible_duration)
             self.scroll_offset = max(min_offset, min(self.scroll_offset, max_offset))
-            
+            self.update_scrollbar()
+
         self.update()
 
     def mouseDoubleClickEvent(self, event):
@@ -247,8 +329,9 @@ class TimelineWidget(QWidget):
                 scope_start, scope_end = self.get_scope_bounds()
                 layer_map = self.get_layer_map()
 
-                # Determine which layer was clicked
-                clicked_layer_idx = (y - self.bm_area_height) // self.row_height
+                # Adjust y for scroll
+                adj_y = y - self.bm_area_height + self.vertical_scroll_offset
+                clicked_layer_idx = int(adj_y // self.current_row_height)
                 
                 # Find section under cursor in that layer
                 target_section = None
@@ -288,18 +371,15 @@ class TimelineWidget(QWidget):
                         self.dragging_bookmark = bm
                         self.aboutToModify.emit()
                         break
+                
                 if not self.dragging_bookmark:
-                    # Seek if clicked on empty space in mini timeline
-                    new_pos = int(time_at_cursor)
-                    # Clamp to scope for seeking? Or allow global?
-                    # Let's allow global seek but clamped to video duration
-                    new_pos = max(0, min(new_pos, int(self.duration)))
+                    # Start dragging Playhead
+                    self.dragging_playhead = True
+                    new_pos = max(0, min(int(time_at_cursor), int(self.duration)))
                     self.positionChanged.emit(new_pos)
             else:
                 # Check Edge Drag (Section Bounds)
                 if self.hover_section:
-                    # Validate we are still on the same layer?
-                    # For simplicity, edge drag works if you hover the edge.
                     self.drag_edge_section = self.hover_section
                     self.aboutToModify.emit()
                     # Determine start or end based on distance
@@ -313,12 +393,14 @@ class TimelineWidget(QWidget):
                     elif abs(x - end_x) < 6:
                         self.drag_edge_type = 'end'
                     else:
-                        self.drag_edge_section = None # False alarm
+                        self.drag_edge_section = None 
 
                 if not self.drag_edge_section:
-                    # Normal seek
-                    new_pos = int(time_at_cursor)
-                    new_pos = max(0, min(new_pos, int(self.duration)))
+                    # If not dragging edge, allow playhead seek via lower area too?
+                    # User asked "drag click the playhead to move it instead of just clicking"
+                    # Usually clicking empty space moves playhead. Dragging it keeps moving it.
+                    self.dragging_playhead = True
+                    new_pos = max(0, min(int(time_at_cursor), int(self.duration)))
                     self.positionChanged.emit(new_pos)
 
     def mouseMoveEvent(self, event):
@@ -330,10 +412,13 @@ class TimelineWidget(QWidget):
         scope_start, scope_end = self.get_scope_bounds()
 
         if self.dragging_bookmark:
-            # Clamp to scope? Or just valid time?
             new_time = max(scope_start, min(time_at_cursor, scope_end))
             self.dragging_bookmark.timestamp = int(new_time)
             self.update()
+            
+        elif self.dragging_playhead:
+            new_pos = max(0, min(int(time_at_cursor), int(self.duration)))
+            self.positionChanged.emit(new_pos)
             
         elif self.drag_edge_section:
             new_time = max(scope_start, min(time_at_cursor, scope_end))
@@ -353,14 +438,14 @@ class TimelineWidget(QWidget):
                 self.hover_section = None
                 
                 layer_map = self.get_layer_map()
-                clicked_layer_idx = (y - self.bm_area_height) // self.row_height
+                adj_y = y - self.bm_area_height + self.vertical_scroll_offset
+                clicked_layer_idx = int(adj_y // self.current_row_height)
 
                 for section in sections:
                     cat = next((c for c in self.project.categories if c.name == section.category_name and c.type == 'section'), None)
                     if not cat: continue
                     
                     layer_idx = layer_map.get(cat.layer, 0)
-                    # Only detect edge if mouse is on correct layer row
                     if layer_idx != clicked_layer_idx: continue
 
                     start_x = self.time_to_x(section.start_time)
@@ -389,6 +474,8 @@ class TimelineWidget(QWidget):
             self.project.events.append(f"Moved Bookmark '{self.dragging_bookmark.category_name}'")
             self.dataChanged.emit()
             self.dragging_bookmark = None
+        
+        self.dragging_playhead = False
         
         if self.drag_edge_section:
             self.project.events.append(f"Resized Section '{self.drag_edge_section.category_name}'")
@@ -442,7 +529,8 @@ class TimelineWidget(QWidget):
         # Find section under cursor (Main Timeline)
         target_section = None
         layer_map = self.get_layer_map()
-        clicked_layer_idx = (y - self.bm_area_height) // self.row_height
+        adj_y = y - self.bm_area_height + self.vertical_scroll_offset
+        clicked_layer_idx = int(adj_y // self.current_row_height)
         
         for section in sections:
             cat = next((c for c in self.project.categories if c.name == section.category_name and c.type == 'section'), None)
