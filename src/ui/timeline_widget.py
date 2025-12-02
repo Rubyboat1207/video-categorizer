@@ -567,6 +567,8 @@ class TimelineWidget(QWidget):
             export_action = menu.addAction("Export Video Segment")
             menu.addSeparator()
             delete_action = menu.addAction("Delete Section")
+            menu.addSeparator()
+            enter_scope = menu.addAction("Enter Scope")
             
             action = menu.exec(event.globalPos())
             
@@ -583,6 +585,8 @@ class TimelineWidget(QWidget):
                 self.project.events.append(f"Deleted Section: {target_section.category_name}")
                 self.update()
                 self.dataChanged.emit()
+            elif action == enter_scope:
+                self.sectionDoubleClicked.emit(target_section)
 
     def change_section_category(self, section: Section, new_cat: str) -> None:
         section.category_name = new_cat

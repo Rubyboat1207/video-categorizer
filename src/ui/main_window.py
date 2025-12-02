@@ -558,6 +558,12 @@ class MainWindow(QMainWindow):
         
         points = [0]
         for s in self.project.sections:
+            def add_subsections(sec: Section) -> None:
+                points.append(sec.start_time)
+                if sec.end_time: points.append(sec.end_time)
+                for sub in sec.sub_sections:
+                    add_subsections(sub)
+            add_subsections(s)
             points.append(s.start_time)
             if s.end_time: points.append(s.end_time)
         points = sorted(list(set(points)))
@@ -577,6 +583,12 @@ class MainWindow(QMainWindow):
         
         points = []
         for s in self.project.sections:
+            def add_subsections(sec: Section) -> None:
+                points.append(sec.start_time)
+                if sec.end_time: points.append(sec.end_time)
+                for sub in sec.sub_sections:
+                    add_subsections(sub)
+            add_subsections(s)
             points.append(s.start_time)
             if s.end_time: points.append(s.end_time)
         points = sorted(list(set(points)))
@@ -710,19 +722,11 @@ class MainWindow(QMainWindow):
         self.current_scope = section
         self.timeline.set_scope(section)
         self.back_scope_btn.setEnabled(True)
-
-        
-
         # Zoom video player logic could be added here to loop only this section, 
         # but for now let's just focus the timeline.
         self.setWindowTitle(f"Video Reviewer - {section.category_name} (Sub-Section Mode)")
 
     def exit_scope(self) -> None:
-        # TODO: Handle multi-level nesting (stack) if needed. 
-        # Currently just 1 level deep is implemented for simplicity, but model supports infinite.
-        # To support infinite, we'd need a parent reference or traverse from root.
-        # For this task, let's assume 1 level or implement simple stack in future.
-        # Actually, let's just go to Root for now to be safe.
         self.current_scope = None
         self.timeline.set_scope(None)
         self.back_scope_btn.setEnabled(False)
